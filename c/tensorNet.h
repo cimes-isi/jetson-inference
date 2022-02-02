@@ -39,6 +39,8 @@ namespace nvinfer1 { class IInt8Calibrator; }
 #include <sstream>
 #include <math.h>
 
+#include <energymon.h>
+#include <energymon-jetson.h>
 
 #if NV_TENSORRT_MAJOR >= 6
 typedef nvinfer1::Dims3 Dims3;
@@ -520,7 +522,7 @@ public:
 			const profilerQuery query = (profilerQuery)n;
 
 			if( PROFILER_QUERY(query) )
-				LogInfo(LOG_TRT "%-12s  CPU %9.5fms  CUDA %9.5fms\n", profilerQueryToStr(query), mProfilerTimes[n].x, mProfilerTimes[n].y);
+				LogInfo(LOG_TRT "%-12s  CPU %9.5fms  CUDA %9.5fms  ENERGY %" PRIu64 "uJ\n", profilerQueryToStr(query), mProfilerTimes[n].x, mProfilerTimes[n].y, mProfilerEnergies[n]);
 		}
 
 		LogInfo(LOG_TRT "------------------------------------------------\n\n");
@@ -638,7 +640,13 @@ protected:
 		const uint32_t flag = (1 << query);
 
 		CUDA(cudaEventRecord(mEventsGPU[evt], mStream)); 
-		timestamp(&mEventsCPU[evt]); 
+		timestamp(&mEventsCPU[evt]);
+		errno = 0;
+		mEventsEnergy[evt] = em.fread(&em);
+		if (mEventsEnergy[evt] == 0 && errno) {
+			// TODO
+			perror("PROFILER_BEGIN: em.fread");
+		}
 
 		mProfilerQueriesUsed |= flag;
 		mProfilerQueriesDone &= ~flag;
@@ -652,7 +660,13 @@ protected:
 		const uint32_t evt = query*2+1; 
 
 		CUDA(cudaEventRecord(mEventsGPU[evt])); 
-		timestamp(&mEventsCPU[evt]); 
+		timestamp(&mEventsCPU[evt]);
+		mEventsEnergy[evt] = em.fread(&em);
+                if (mEventsEnergy[evt] == 0 && errno) {
+                        // TODO
+                        perror("PROFILER_END: em.fread");
+                }
+		mProfilerEnergies[query] = mEventsEnergy[evt] - mEventsEnergy[evt-1];
 		timespec cpuTime; 
 		timeDiff(mEventsCPU[evt-1], mEventsCPU[evt], &cpuTime);
 		mProfilerTimes[query].x = timeFloat(cpuTime);
@@ -677,6 +691,7 @@ protected:
 		{
 			mProfilerTimes[PROFILER_TOTAL].x = 0.0f;
 			mProfilerTimes[PROFILER_TOTAL].y = 0.0f;
+			mProfilerEnergies[PROFILER_TOTAL] = 0;
 
 			for( uint32_t n=0; n < PROFILER_TOTAL; n++ )
 			{
@@ -684,6 +699,7 @@ protected:
 				{
 					mProfilerTimes[PROFILER_TOTAL].x += mProfilerTimes[n].x;
 					mProfilerTimes[PROFILER_TOTAL].y += mProfilerTimes[n].y;
+					mProfilerEnergies[PROFILER_TOTAL] += mProfilerEnergies[n];
 				}
 			}
 
@@ -722,12 +738,15 @@ protected:
 	cudaStream_t  mStream;
 	cudaEvent_t   mEventsGPU[PROFILER_TOTAL * 2];
 	timespec      mEventsCPU[PROFILER_TOTAL * 2];
+	energymon     em;
+	uint64_t      mEventsEnergy[PROFILER_TOTAL * 2];
 
 	nvinfer1::IRuntime* mInfer;
 	nvinfer1::ICudaEngine* mEngine;
 	nvinfer1::IExecutionContext* mContext;
 	
 	float2   mProfilerTimes[PROFILER_TOTAL + 1];
+	uint64_t mProfilerEnergies[PROFILER_TOTAL + 1];
 	uint32_t mProfilerQueriesUsed;
 	uint32_t mProfilerQueriesDone;
 	uint32_t mWorkspaceSize;

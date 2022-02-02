@@ -311,9 +311,16 @@ tensorNet::tensorNet()
 	mProfilerQueriesUsed = 0;
 	mProfilerQueriesDone = 0;
 
+	memset(mEventsEnergy, 0, sizeof(mEventsEnergy));
 	memset(mEventsCPU, 0, sizeof(mEventsCPU));
 	memset(mEventsGPU, 0, sizeof(mEventsGPU));
 	memset(mProfilerTimes, 0, sizeof(mProfilerTimes));
+
+	energymon_get_jetson(&em);
+	if (em.finit(&em)) {
+		// TODO
+		perror("em.finit");
+	}
 
 #if NV_TENSORRT_MAJOR > 5
 	mWorkspaceSize = 32 << 20;
@@ -326,6 +333,10 @@ tensorNet::tensorNet()
 // Destructor
 tensorNet::~tensorNet()
 {
+	if (em.ffinish(&em)) {
+		// TODO
+		perror("em.ffinish");
+	}
 	if( mEngine != NULL )
 	{
 		mEngine->destroy();

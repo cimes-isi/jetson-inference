@@ -88,6 +88,10 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_OUTPUT_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_OUTPUT_DIR}/lib)
 
 
+# TODO: build as submodule instead
+find_package(PkgConfig REQUIRED)
+pkg_search_module(EnergyMonJetson REQUIRED IMPORTED_TARGET energymon-jetson)
+
 # build C/C++ library
 include_directories(${PROJECT_INCLUDE_DIR} ${PROJECT_INCLUDE_DIR}/jetson-inference ${PROJECT_INCLUDE_DIR}/jetson-utils)
 include_directories(/usr/include/gstreamer-1.0 /usr/lib/aarch64-linux-gnu/gstreamer-1.0/include /usr/include/glib-2.0 /usr/include/libxml2 /usr/lib/aarch64-linux-gnu/glib-2.0/include/)
@@ -130,6 +134,7 @@ endif()
 link_directories(/usr/lib/aarch64-linux-gnu/tegra)	
 cuda_add_library(jetson-inference SHARED ${inferenceSources} ${pluginSources})
 target_include_directories(jetson-inference PRIVATE ${PROJECT_SOURCE_DIR}/plugins/pose/trt_pose/parse)
+target_link_libraries(jetson-inference PkgConfig::EnergyMonJetson)
 
 # transfer all headers to the include directory
 file(MAKE_DIRECTORY ${PROJECT_INCLUDE_DIR}/jetson-inference)
